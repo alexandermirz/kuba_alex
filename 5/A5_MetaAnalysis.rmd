@@ -1,0 +1,143 @@
+---
+title: "Assignment 5 - Meta-analysis of pitch in schizophrenia"
+author: "Riccardo Fusaroli"
+date: "3/7/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Building on the shoulders of giants: meta-analysis
+
+## Questions to be answered
+
+1. What is the current evidence for distinctive vocal patterns in schizophrenia? Report how many papers report quantitative estimates, comment on what percentage of the overall studies reviewed they represent (see PRISMA chart) your method to analyze them, the estimated effect size of the difference (mean effect size and standard error) and forest plots representing it. N.B. Only measures of pitch mean and pitch sd are required for the assignment. Feel free to ignore the rest (although pause behavior looks interesting, if you check my article).
+
+2. Do the results match your own analysis from Assignment 3? If you add your results to the meta-analysis, do the estimated effect sizes change? Report the new estimates and the new forest plots.
+
+3. Assess the quality of the literature: report and comment on heterogeneity of the studies (tau, I2), on publication bias (funnel plot), and on influential studies.
+
+## Tips on the process to follow:
+
+- Download the data on all published articles analyzing voice in schizophrenia and the prisma chart as reference of all articles found and reviewed
+- Look through the dataset to find out which columns to use, and if there is any additional information written as comments (real world data is always messy!).
+    * Hint: PITCH_F0M and PITCH_F0SD group of variables are what you need
+    * Hint: Make sure you read the comments in the columns: `pitch_f0_variability`, `frequency`, `Title`,  `ACOUST_ANA_DESCR`, `DESCRIPTION`, and `COMMENTS`
+- Following the procedure in the slides calculate effect size and standard error of the effect size per each study. N.B. we focus on pitch mean and pitch standard deviation.
+ . first try using lmer (to connect to what you know of mixed effects models)
+ . then use rma() (to get some juicy additional statistics)
+
+- Build a forest plot of the results (forest(model))
+ 
+- Go back to Assignment 3, add your own study to the data table, and re-run meta-analysis. Do the results change?
+
+- Now look at the output of rma() and check tau and I2
+
+```{r}
+
+# data & packages
+pacman::p_load(tidyverse,metafor, lme4, ggplot2, patchwork)
+dat <- readxl::read_xlsx("Matrix_MetaAnalysis_Diagnosis_updated290719.xlsx")
+
+#renaming and selecting relevant columns
+meta_data <- dat %>% 
+    mutate(
+    n1=SAMPLE_SIZE_SZ,
+    n2=SAMPLE_SIZE_HC,
+    m1=PITCH_F0_SZ_M,
+    m2=PITCH_F0_HC_M,
+    sd1=PITCH_F0_SZ_SD,
+    sd2=PITCH_F0_HC_SD,
+    m1_sd=PITCH_F0SD_SZ_M,
+    m2_sd=PITCH_F0SD_HC_M,
+    sd_sd1=PITCH_F0SD_SZ_SD,
+    sd_sd2=PITCH_F0SD_HC_SD
+)
+
+
+meta_data <- meta_data[,148:157]
+meta_data$study <- dat$StudyID
+meta_data$article <- dat$Article
+
+### ANALYSIS OF BASIC DATA
+
+# #applying function escav to get vi and yi
+PitchMeanES_without <- escalc("SMD",
+                      n1i=n1, n2i = n2,
+                      m1i=m1, m2i=m2,
+                      sd1i=sd1, sd2i = sd2,
+                      data=meta_data)
+
+# playing around with LMER
+without_lmer <- lmer(yi~1 + (1|study), data=PitchMeanES_without, weights = 1/vi, REML = F,
+               control=lmerControl(
+                   check.nobs.vs.nlev="ignore",
+                   check.nobs.vs.nRE="ignore"
+               ))
+summary(without_lmer)
+
+# specific meta-analysis model with the cool plots
+without_rma <- rma(yi, vi, data=PitchMeanES_without, slab=article)
+
+forest(without_rma)
+
+summary(without_rma)
+
+residuals(without_rma)
+
+# funnel plot
+funnel(without_rma)
+
+
+### ANALYSIS WITH OUR DATA ###
+
+# appending the data
+# from the first extraction (106,116,152.417,160.3411,48.70924, 67.2653, NA, NA, NA, 666)
+meta_data_our <- meta_data
+assign3 <- as.vector(c(106,116,154.312,160.8063,23.89147, 34.55962, NA, NA, NA, 666, "Mirz & Raszka(2019)"))
+eta_data_our <- rbind(meta_data_our,assign3)
+
+
+#applying function escav to get vi and yi
+PitchMeanES_with <- escalc("SMD",
+                      n1i=n1, n2i = n2,
+                      m1i=m1, m2i=m2,
+                      sd1i=sd1, sd2i = sd2,
+                      data=meta_data_our)
+
+
+
+
+# playing around with LMER
+with_lmer <- lmer(yi~1 + (1|study), data=PitchMeanES_with, weights = 1/vi, REML = F,
+               control=lmerControl(
+                   check.nobs.vs.nlev="ignore",
+                   check.nobs.vs.nRE="ignore"
+               ))
+summary(with_lmer)
+
+# specific meta-analysis model with the cool plots
+with_rma <- rma(yi, vi, data=PitchMeanES_with, slab=study)
+
+forest(with_rma)
+
+summary(with_rma)
+
+residuals(with_rma)
+
+# funnel plot
+funnel(with_rma)
+funnel(without_rma)
+```
+
+yi = cohen's d (standardized mean difference (output of lmer!)- what is the difference between )
+average residual is an average error - square it you get yi
+
+vi is SD na druhou
+SD is a measure of how good , small sd, mean good model, large sd, a mean is good model
+pitchM_scal~diagnosis --- (take the beta estimates, square it and get yi, do 7 time), then the FINAL SE
+
+SE is a SD of beta estimates
+
